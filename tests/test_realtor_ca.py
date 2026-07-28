@@ -198,3 +198,63 @@ def test_search_url_carries_the_criteria(source):
     url = source._search_url(c)
     assert "PriceMin=600000" in url and "PriceMax=800000" in url
     assert "BedRange=3-0" in url and "BathRange=2-0" in url
+
+
+# ---------------------------------------------------------------------------
+# Field health — the response schema is undocumented and may change
+# ---------------------------------------------------------------------------
+
+def test_alternate_field_paths_are_tolerated(source):
+    """A field living at a different path must degrade that field only.
+
+    REALTOR.ca's response shape is not contractual, so each value is looked up
+    across the paths seen in public clients.
+    """
+    record = {
+        "MlsNumber": "A2100002",
+        "Property": {
+            "PriceUnformattedValue": "690000",
+            "Address": {"AddressText": "9 Test St NW, Calgary", "Latitude": "51.05",
+                        "Longitude": "-114.08"},
+        },
+        "Building": {"Bedrooms": "3", "Bathrooms": "2", "TotalFinishedArea": "1,400 sqft"},
+    }
+    listing = source._to_listing(record)
+    assert listing.price == 690_000
+    assert listing.baths == 2.0
+    assert listing.sqft == 1400
+
+
+def test_health_check_warns_when_a_critical_field_is_mostly_absent(source, caplog):
+    """A renamed upstream field must surface as a warning, not as 'no matches'."""
+    import logging
+
+    from homescout.discovery.realtor_ca import _check_field_health
+    from homescout.models import Listing
+
+    listings = [
+        Listing(mls_id=f"X{i}", source="realtor_ca", url="", address="a",
+                price=None, latitude=51.0, beds=3.0)
+        for i in range(10)
+    ]
+    with caplog.at_level(logging.WARNING):
+        _check_field_health(listings)
+
+    assert any("price" in r.message for r in caplog.records)
+
+
+def test_health_check_quiet_when_fields_are_present(source, caplog):
+    import logging
+
+    from homescout.discovery.realtor_ca import _check_field_health
+    from homescout.models import Listing
+
+    listings = [
+        Listing(mls_id=f"X{i}", source="realtor_ca", url="", address="a",
+                price=700_000, latitude=51.0, beds=3.0)
+        for i in range(10)
+    ]
+    with caplog.at_level(logging.WARNING):
+        _check_field_health(listings)
+
+    assert not caplog.records

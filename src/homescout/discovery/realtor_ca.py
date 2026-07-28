@@ -46,6 +46,7 @@ class RealtorCaSource:
         self.cfg = cfg or {}
         self.headless = bool(self.cfg.get("headless", False))
         self.max_pages = int(self.cfg.get("max_pages", 20))
+        self.page_size = int(self.cfg.get("page_size", 50))
         self.delay_min = float(self.cfg.get("page_delay_min", 3.0))
         self.delay_max = float(self.cfg.get("page_delay_max", 6.0))
         self.nav_timeout = int(self.cfg.get("nav_timeout_ms", 60000))
@@ -92,9 +93,19 @@ class RealtorCaSource:
                 log.info("Opening REALTOR.ca map search...")
                 page.goto(self._search_url(criteria), wait_until="domcontentloaded")
 
+                # Wait for the search call itself rather than a fixed sleep: a
+                # slow first response would otherwise leave zero payloads and
+                # return an empty result set that looks like "nothing matched".
+                try:
+                    page.wait_for_response(
+                        lambda r: API_MARKER in r.url,
+                        timeout=self.nav_timeout,
+                    )
+                except Exception:
+                    log.debug("No %s response within the navigation timeout", API_MARKER)
+
                 # The bot check may need a human. Running visibly is what makes
                 # that possible; there is no automated bypass here by design.
-                page.wait_for_timeout(5000)
                 if self._looks_blocked(page):
                     log.warning(
                         "REALTOR.ca is showing a verification page. Solve it in the open "
@@ -121,6 +132,10 @@ class RealtorCaSource:
         trusted to have honored them.
         """
         bbox = self.bbox
+        # Parameter names follow the documented shape of the underlying
+        # PropertySearch_Post call (BedRange/BathRange are "min-max", where 0
+        # means unbounded; PropertySearchTypeId 1 is Residential;
+        # TransactionTypeId 2 is For Sale).
         params = [
             f"LatitudeMax={bbox.get('north', 51.212)}",
             f"LongitudeMax={bbox.get('east', -113.859)}",
@@ -130,8 +145,11 @@ class RealtorCaSource:
             f"PriceMax={criteria.price_max}",
             f"BedRange={criteria.beds_min}-0",
             f"BathRange={criteria.baths_min}-0",
-            "PropertyTypeGroupID=1",
+            f"RecordsPerPage={self.page_size}",
+            "PropertySearchTypeId=1",
             "TransactionTypeId=2",
+            "SortBy=6-D",
+            "CultureId=1",
             "Currency=CAD",
         ]
         return f"{SEARCH_URL}#{'&'.join(params)}"
@@ -206,6 +224,7 @@ class RealtorCaSource:
                     seen.add(listing.mls_id)
                     listings.append(listing)
 
+        _check_field_health(listings)
         return listings
 
     def _to_listing(self, result: dict) -> Listing | None:
@@ -214,27 +233,35 @@ class RealtorCaSource:
             if not mls_id:
                 return None
 
-            address = result.get("Property", {}).get("Address", {}) or {}
             prop = result.get("Property", {}) or {}
+            address = prop.get("Address", {}) or {}
             building = result.get("Building", {}) or {}
 
-            lat = _float(address.get("Latitude"))
-            lon = _float(address.get("Longitude"))
+            # This endpoint is undocumented and its field names are not
+            # contractual. Each value is looked up across the paths observed in
+            # public clients, so a rename in one place degrades that field to
+            # None instead of silently emptying the whole record.
+            lat = _first(_float, address.get("Latitude"), prop.get("Latitude"), result.get("Latitude"))
+            lon = _first(_float, address.get("Longitude"), prop.get("Longitude"), result.get("Longitude"))
 
-            street, city, postal = _split_address(address.get("AddressText", ""))
+            street, city, postal = _split_address(
+                address.get("AddressText") or address.get("Text") or ""
+            )
 
             return Listing(
                 mls_id=mls_id,
                 source=self.name,
-                url=_absolute(result.get("RelativeDetailsURL", "")),
+                url=_absolute(result.get("RelativeDetailsURL") or result.get("RelativeURLEn") or ""),
                 address=street,
                 city=city,
                 postal_code=postal,
-                price=_price(prop.get("Price")),
-                beds=_rooms(building.get("Bedrooms")),
-                baths=_rooms(building.get("BathroomTotal")),
-                sqft=_sqft(building.get("SizeInterior")),
-                lot_sqft=_sqft(prop.get("SizeTotal")),
+                price=_first(_price, prop.get("Price"), prop.get("PriceUnformattedValue"), result.get("Price")),
+                beds=_first(_rooms, building.get("Bedrooms"), result.get("Bedrooms")),
+                baths=_first(_rooms, building.get("BathroomTotal"), building.get("Bathrooms"),
+                             result.get("BathroomTotal")),
+                sqft=_first(_sqft, building.get("SizeInterior"), building.get("SizeInteriorFinished"),
+                            building.get("TotalFinishedArea")),
+                lot_sqft=_first(_sqft, prop.get("SizeTotal"), prop.get("LotSize")),
                 property_type=str(prop.get("Type") or building.get("Type") or "").strip(),
                 list_date=_list_date(result),
                 days_on_market=_days_on_market(result),
@@ -260,8 +287,45 @@ class RealtorCaSource:
 
 
 # ---------------------------------------------------------------------------
+# Health check
+# ---------------------------------------------------------------------------
+
+# A field renamed upstream would otherwise show up as "no listings matched"
+# rather than as a broken parser, so a scrape that returns records with a
+# critical field almost entirely absent says so loudly.
+_CRITICAL = ("price", "latitude", "beds")
+_HEALTH_THRESHOLD = 0.5
+
+
+def _check_field_health(listings: list[Listing]) -> None:
+    if not listings:
+        return
+
+    total = len(listings)
+    for field in _CRITICAL:
+        present = sum(1 for listing in listings if getattr(listing, field) is not None)
+        if present / total < _HEALTH_THRESHOLD:
+            log.warning(
+                "Only %d/%d listings have a '%s' value. REALTOR.ca's response fields are "
+                "undocumented and may have changed — check the raw payload written to the "
+                "raw/ directory and update the field paths in _to_listing().",
+                present, total, field,
+            )
+
+
+# ---------------------------------------------------------------------------
 # Field parsing
 # ---------------------------------------------------------------------------
+
+def _first(parser, *candidates):
+    """Return the first candidate that parses to a non-None value."""
+    for candidate in candidates:
+        if candidate is None:
+            continue
+        value = parser(candidate)
+        if value is not None:
+            return value
+    return None
 
 _MONEY = re.compile(r"[^\d.]")
 _SQFT = re.compile(r"([\d,]+(?:\.\d+)?)")

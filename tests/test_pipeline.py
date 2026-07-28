@@ -99,6 +99,84 @@ def test_filter_removes_the_planted_edge_cases(env):
     assert "duplicate" in reasons
 
 
+def test_second_full_run_reprocesses_everything(env):
+    """A repeat run must not be a silent no-op.
+
+    Listings are keyed by mls_id, so a second scrape hits ON CONFLICT for every
+    already-seen listing. If the upsert leaves `stage` at whatever it reached,
+    the filter stage finds nothing pending and the whole run quietly does
+    nothing — on a tool whose entire purpose is repeated runs.
+    """
+    first = _run_all(env)
+    second = _run_all(env)
+
+    assert second["filter"]["passed"] == first["filter"]["passed"], \
+        "second run filtered nothing — stage was not reset on re-scrape"
+    assert second["rank"]["ranked"] == first["rank"]["ranked"]
+
+
+def test_rescrape_reconsiders_a_previously_rejected_listing(env):
+    """A listing that was too expensive must be reconsidered if its price drops.
+
+    Rejection is a judgement about the data at the time, not a permanent mark.
+    """
+    from homescout.models import Listing
+
+    database = env["database"]
+    mls_id = "PRICEDROP1"
+
+    def listing_at(price):
+        return Listing(
+            mls_id=mls_id, source="fixtures", url="http://example.invalid",
+            address="1 Test St SW", city="Calgary",
+            price=price, beds=3.0, baths=2.0, sqft=1500,
+            property_type="House", latitude=51.04, longitude=-114.07,
+            days_on_market=5,
+        )
+
+    # First sighting: over budget, so the filter stage rejects it.
+    conn = database.get_connection()
+    try:
+        database.upsert_listings(conn, [listing_at(950_000)])
+    finally:
+        conn.close()
+
+    env["pipeline"].run(stages=["filter"], criteria=CRITERIA)
+
+    conn = database.get_connection()
+    try:
+        before = conn.execute(
+            "SELECT stage, reject_reason FROM listings WHERE mls_id=?", (mls_id,)
+        ).fetchone()
+    finally:
+        conn.close()
+    assert before["stage"] == database.STAGE_REJECTED
+    assert "above maximum" in before["reject_reason"]
+
+    # Second sighting: the price has dropped into range.
+    conn = database.get_connection()
+    try:
+        database.upsert_listings(conn, [listing_at(700_000)])
+        after = conn.execute(
+            "SELECT stage, reject_reason FROM listings WHERE mls_id=?", (mls_id,)
+        ).fetchone()
+    finally:
+        conn.close()
+
+    assert after["stage"] == database.STAGE_SCRAPED, \
+        "a re-scraped listing must be reconsidered, not left rejected forever"
+    assert after["reject_reason"] is None, "the stale rejection reason must be cleared"
+
+    env["pipeline"].run(stages=["filter"], criteria=CRITERIA)
+
+    conn = database.get_connection()
+    try:
+        final = conn.execute("SELECT stage FROM listings WHERE mls_id=?", (mls_id,)).fetchone()
+    finally:
+        conn.close()
+    assert final["stage"] == database.STAGE_FILTERED
+
+
 def test_rank_is_resumable_without_rescraping(env):
     _run_all(env)
 

@@ -47,6 +47,10 @@ def run(
     stages: list[str] = typer.Argument(None, help="Stages to run: scrape, filter, analyze, rank. Default: all."),
     source: str = typer.Option(None, "--source", "-s", help="Listing source to use (e.g. fixtures)."),
     dry_run: bool = typer.Option(False, "--dry-run", help="Preview the stage plan without executing."),
+    refresh_assessments: bool = typer.Option(
+        False, "--refresh-assessments",
+        help="Re-download the City assessment data instead of using the cached copy.",
+    ),
     top: int = typer.Option(10, "--top", help="How many listings to show when the run completes."),
     no_view: bool = typer.Option(False, "--no-view", help="Skip the results table at the end."),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
@@ -56,7 +60,12 @@ def run(
     load_env()
 
     try:
-        stats = pipeline.run(stages=list(stages) if stages else None, source=source, dry_run=dry_run)
+        stats = pipeline.run(
+            stages=list(stages) if stages else None,
+            source=source,
+            dry_run=dry_run,
+            refresh_assessments=refresh_assessments,
+        )
     except ValueError as exc:
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(code=1)

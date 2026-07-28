@@ -69,6 +69,7 @@ def run(
     source: str | None = None,
     dry_run: bool = False,
     criteria: SearchCriteria | None = None,
+    refresh_assessments: bool = False,
 ) -> dict:
     """Run the requested stages in order. Returns per-stage stats."""
     stages = _resolve_stages(stages)
@@ -84,7 +85,10 @@ def run(
     for stage in stages:
         console.rule(f"[bold cyan]{stage}[/bold cyan] — {STAGE_META[stage]['desc']}")
         runner = _RUNNERS[stage]
-        stats[stage] = runner(criteria, source)
+        if stage == "analyze":
+            stats[stage] = runner(criteria, source, refresh_assessments=refresh_assessments)
+        else:
+            stats[stage] = runner(criteria, source)
 
     return stats
 
@@ -198,7 +202,7 @@ def _run_filter(criteria: SearchCriteria, source: str | None) -> dict:
 # Stage: analyze
 # ---------------------------------------------------------------------------
 
-def _run_analyze(criteria: SearchCriteria, source: str | None) -> dict:
+def _run_analyze(criteria: SearchCriteria, source: str | None, refresh_assessments: bool = False) -> dict:
     """Fan out across listings, behind a shared rate limiter.
 
     The pool is small on purpose: every upstream service here is a free public
@@ -215,7 +219,7 @@ def _run_analyze(criteria: SearchCriteria, source: str | None) -> dict:
             return {"input": 0, "analyzed": 0}
 
         # One-time bulk load; joined locally thereafter.
-        held = calgary.ensure_assessments(conn)
+        held = calgary.ensure_assessments(conn, force=refresh_assessments)
         if held:
             console.print(f"  Parcel assessments available: [bold]{held:,}[/bold]")
 

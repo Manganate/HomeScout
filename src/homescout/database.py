@@ -158,8 +158,16 @@ def geo_key(lat: float, lon: float) -> str:
 # ---------------------------------------------------------------------------
 
 def upsert_listing(conn: sqlite3.Connection, listing: Listing) -> None:
-    """Insert or update a listing by mls_id, preserving first_seen and any
-    enrichment already computed for it."""
+    """Insert or update a listing by mls_id, preserving first_seen.
+
+    Re-scraping resets the row to the `scraped` stage and clears any previous
+    rejection. Without that reset, a second run is a silent no-op — every
+    already-seen listing keeps the stage it reached, so the filter stage finds
+    nothing to do — and a listing whose price dropped into range would stay
+    rejected forever. Re-running the later stages is cheap because enrichment
+    is cached, and re-ranking the whole set together is what keeps percentile
+    scores comparable across the cohort.
+    """
     row = listing.to_row()
     now = time.time()
     values = [row.get(c) for c in _LISTING_COLUMNS]
@@ -174,7 +182,9 @@ def upsert_listing(conn: sqlite3.Connection, listing: Listing) -> None:
         VALUES ({placeholders}, ?, ?, ?)
         ON CONFLICT(mls_id) DO UPDATE SET
             {updates},
-            last_seen=excluded.last_seen
+            last_seen=excluded.last_seen,
+            stage=excluded.stage,
+            reject_reason=NULL
         """,
         (*values, now, now, STAGE_SCRAPED),
     )
