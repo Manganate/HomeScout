@@ -1,0 +1,77 @@
+[project]
+name = "homescout"
+version = "0.1.0"
+description = "Real estate listing agent: scrape, filter, enrich, and rank homes for sale"
+readme = "README.md"
+license = "AGPL-3.0-only"
+requires-python = ">=3.11"
+authors = [{name = "Manganate"}]
+keywords = ["real-estate", "listings", "mls", "automation", "ranking"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "License :: OSI Approved :: GNU Affero General Public License v3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Office/Business",
+]
+
+dependencies = [
+    "typer>=0.9.0",
+    "rich>=13.0",
+    "httpx>=0.24",
+    "playwright>=1.40",
+    "python-dotenv>=1.0",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0", "ruff>=0.1"]
+
+[project.scripts]
+homescout = "homescout.cli:app"
+
+[project.urls]
+Homepage = "https://github.com/Manganate/HomeScout"
+Repository = "https://github.com/Manganate/HomeScout"
+Issues = "https://github.com/Manganate/HomeScout/issues"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/homescout"]
+
+[tool.hatch.build]
+artifacts = ["src/homescout/config/*.yaml"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+
+[tool.ruff.lint]
+ignore = [
+    # Typer's documented idiom is a call in the argument default.
+    "B008",
+    # Enrichment and scraping are best-effort by design: a single malformed
+    # record or unreachable service must degrade the run, not abort it.
+    "BLE001",
+    "S112",
+    # Local wall-clock time is intended for report timestamps and filenames,
+    # and listing dates are date-only strings with no zone to preserve.
+    "DTZ005",
+    "DTZ007",
+    # Style-only.
+    "C408",
+    "FURB162",
+    "RUF007",
+    "RUF046",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101"]  # asserts are the point of a test
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

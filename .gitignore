@@ -1,0 +1,31 @@
+# Secrets — never commit
+.env
+*.env
+!.env.example
+
+# Local user state (also lives outside the repo in ~/.homescout/)
+*.db
+*.sqlite
+*.sqlite3
+raw/
+report.html
+browser-profile/
+.homescout/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/

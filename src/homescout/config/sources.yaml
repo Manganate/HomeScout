@@ -1,0 +1,77 @@
+# Source and upstream-service settings.
+#
+# Every enrichment service here is a free public endpoint with a real rate
+# limit. Exceeding those limits gets you banned, not throttled — so the pacing
+# values below are deliberately conservative. Raise them at your own risk.
+
+listing_sources:
+  realtor_ca:
+    enabled: true
+    base_url: "https://www.realtor.ca"
+    # Human-paced, jittered delay between result pages (seconds).
+    page_delay_min: 3.0
+    page_delay_max: 6.0
+    max_pages: 20
+    page_size: 50
+    # Headless browsers are fingerprinted and blocked outright by this site.
+    headless: false
+    nav_timeout_ms: 60000
+    # Calgary bounding box (south, west, north, east).
+    bbox:
+      south: 50.842
+      west: -114.316
+      north: 51.212
+      east: -113.859
+
+  fixtures:
+    enabled: true          # offline sample data; used by tests and --source fixtures
+
+services:
+  osrm:
+    base_url: "https://router.project-osrm.org"
+    # Demo server policy: max 1 request/second, non-commercial use only.
+    rate_limit_per_sec: 1.0
+    timeout_s: 15
+    # Used only when OSRM is unreachable: haversine km -> minutes.
+    fallback_kmh: 42.0
+
+  nominatim:
+    base_url: "https://nominatim.openstreetmap.org"
+    # Policy requires max 1 req/s and a descriptive User-Agent.
+    rate_limit_per_sec: 1.0
+    timeout_s: 15
+
+  overpass:
+    base_url: "https://overpass-api.de/api/interpreter"
+    # The main instance returns 504 under load. Mirrors carry the same data and
+    # are tried in order before a lookup is treated as unavailable.
+    mirrors:
+      - "https://overpass.kumi.systems/api/interpreter"
+      - "https://overpass.private.coffee/api/interpreter"
+    # Must exceed the [timeout:N] set in the query itself, or the client hangs
+    # up while the server is still working and every category looks like a
+    # failure.
+    timeout_s: 120
+    query_timeout_s: 90
+    # Public instances grant only a couple of concurrent slots per IP, so
+    # category queries are spaced further apart than the nominal 1/s.
+    rate_limit_per_sec: 0.5
+    retries: 2
+    radius_m: 1000
+
+  calgary_open_data:
+    # Socrata portal. Current Year Property Assessments (parcel).
+    assessments_csv: "https://data.calgary.ca/api/views/4bsw-nn7w/rows.csv?accessType=DOWNLOAD"
+    timeout_s: 300
+
+# Shared HTTP identity. Nominatim's usage policy requires a descriptive
+# User-Agent that identifies the application.
+http:
+  user_agent: "HomeScout/0.1 (personal real-estate search tool)"
+
+# Worker pools. Analyze stays small because it fans out onto rate-limited
+# public services; the token bucket is the real limiter, but a large pool would
+# just queue up behind it and waste threads.
+concurrency:
+  scrape_workers: 2      # across sources, never across pages of one host
+  analyze_workers: 4     # across listings

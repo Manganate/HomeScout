@@ -1,0 +1,45 @@
+# HomeScout search configuration
+#
+# `homescout init` writes this file to ~/.homescout/search.yaml. You can also
+# edit it directly — `homescout run` reads it fresh on every run, so changing
+# a city, budget, or commute radius never requires a code change.
+
+location:
+  area: "Calgary, Alberta"
+  # CBD anchor that commute time is measured to.
+  # Default is the Stephen Avenue core in downtown Calgary.
+  cbd_lat: 51.0452
+  cbd_lon: -114.0630
+
+search:
+  price_min: 600000
+  price_max: 800000
+
+  beds_min: 3
+  beds_max: null          # null = no upper limit
+  baths_min: 2
+  baths_max: null
+
+  sqft_min: null
+  sqft_max: null
+
+  # Hard cut applied after real routing is computed in the analyze stage.
+  max_commute_min: 20
+  commute_mode: driving   # driving | transit
+
+  max_listing_age_days: 30
+
+  property_types:
+    - House
+    - Townhouse
+    - Duplex
+
+# Ranking weights. Normalized automatically, so they need not sum to 1.
+# Raise one to prioritize it:
+#   value     — price per sqft, and list price vs. City assessed value
+#   location  — commute time, walkability proxy, nearby amenities
+#   freshness — days on market
+weights:
+  value: 0.34
+  location: 0.33
+  freshness: 0.33
