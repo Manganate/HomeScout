@@ -40,6 +40,10 @@ def get_source(name: str) -> ListingSource:
         from homescout.discovery.fixtures import FixtureSource
         return FixtureSource()
 
+    if name in ("email", "email_alerts", "alerts"):
+        from homescout.discovery.email_alerts import EmailAlertSource
+        return EmailAlertSource()
+
     if name in ("realtor_ca", "realtor.ca", "realtorca"):
         from homescout.discovery.realtor_ca import RealtorCaSource
         return RealtorCaSource()
@@ -48,4 +52,4 @@ def get_source(name: str) -> ListingSource:
 
 
 def available_sources() -> list[str]:
-    return ["realtor_ca", "fixtures"]
+    return ["email", "realtor_ca", "fixtures"]

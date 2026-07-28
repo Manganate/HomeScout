@@ -73,13 +73,43 @@ The walkability figure is an **OpenStreetMap-derived proxy**, computed from dist
 
 Listing sources implement the `ListingSource` protocol in `discovery/base.py`, so swapping one changes nothing downstream.
 
+| Source | Status | Notes |
+|---|---|---|
+| `email` | **default** | REALTOR.ca saved-search alert emails |
+| `fixtures` | dev/test | Offline sample data built from real Calgary parcels |
+| `realtor_ca` | **disabled** | Blocked by bot protection — see below |
+
+### `email` — alert ingestion
+
+You create saved searches on REALTOR.ca; it emails you matching listings; HomeScout reads them. Nothing is scraped and no access control is worked around — the site is deliberately sending you this data, and it arrives in your own mailbox.
+
+Two ways to supply the messages:
+
+```bash
+# 1. Drop them in as files (no credentials)
+#    Drag the email from Mail to Finder, or File > Save As
+cp ~/Desktop/*.eml ~/.homescout/inbox/
+homescout run --source email
+
+# 2. Or fetch over IMAP — add to ~/.homescout/.env
+HOMESCOUT_IMAP_USER=you@gmail.com
+HOMESCOUT_IMAP_PASSWORD=<app password, not your account password>
+HOMESCOUT_IMAP_HOST=imap.gmail.com     # optional
+HOMESCOUT_IMAP_FROM=realtor.ca         # optional sender filter
+```
+
+IMAP access is read-only: messages are fetched with `BODY.PEEK` so they aren't marked read, and nothing is ever deleted.
+
+Two things the emails don't carry, and how each is recovered:
+
+- **No coordinates.** Addresses are geocoded via Nominatim (1 req/s, cached), expanding Calgary's abbreviations first — `71 Edgepark Vi NW` → `Edgepark Villas`, which Nominatim can resolve. Without that expansion the listing fails to geocode and is dropped for missing coordinates.
+- **No list date.** The email's own `Date:` header is the freshness signal — an alert means "new as of when this was sent". Bare saved HTML has no headers, so freshness is simply unavailable and the scorer reweights around it.
+
+### `realtor_ca` — disabled
+
+Direct scraping does not work. REALTOR.ca sits behind Imperva, which returns **HTTP 403 to automated browsers before the page loads**, so the search API is never reached. Notably a plain `curl` from the same IP gets 200 — the detection is on the browser fingerprint, not the network. Getting past that would mean defeating an access control the operator is actively enforcing, so the module is left disabled as a reference implementation.
+
 Enrichment uses free, keyless public services — OpenStreetMap Overpass for amenities, OSRM for routing, Nominatim for geocoding, and the City of Calgary open data portal for parcel assessments. All are rate-limited and cached in SQLite, so re-runs cost nothing: a cold analyze stage takes minutes, a warm one under a second.
-
-### Known limits
-
-**The REALTOR.ca response schema is unverified against live output.** That endpoint is undocumented, and its field names are not contractual. The parser looks each value up across several paths observed in public clients, and a post-scrape health check warns loudly if a critical field comes back mostly empty — but until the scraper has run against the live site, treat the field mapping in `discovery/realtor_ca.py` as unconfirmed. Raw payloads are written to `~/.homescout/raw/` on every run precisely so the mapping can be corrected from real data.
-
-**The assessment-join match rate is measured, but on reformatted City records.** 40 real Calgary addresses were rewritten into portal-style variants (expanded street types, punctuated quadrants, unit prefixes) and matched at 100%. That validates the normalizer — it caught three wrong abbreviations (`AV` not `AVE`, `GR` for Green, `CO` for Court) — but it is not evidence about real portal output. Condo-style addresses such as `#302 123 Main Street SW` are expected to miss; they degrade to `assessment_ratio = None` and the scorer reweights around them rather than producing a wrong number.
 
 ## Terms of use
 

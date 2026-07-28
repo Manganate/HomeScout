@@ -5,8 +5,18 @@
 # values below are deliberately conservative. Raise them at your own risk.
 
 listing_sources:
-  realtor_ca:
+  # REALTOR.ca saved-search alert emails. Nothing is scraped: you set up saved
+  # searches on the site, it emails you matches, and HomeScout reads them from
+  # ~/.homescout/inbox/ (or over IMAP, configured in .env).
+  email:
     enabled: true
+
+  # Direct scraping of REALTOR.ca. DISABLED: the site is behind Imperva, which
+  # returns HTTP 403 to automated browsers before the page loads, so the search
+  # API is never reached. Left in place as a reference implementation and in
+  # case a compliant feed is wired in behind the same seam later.
+  realtor_ca:
+    enabled: false
     base_url: "https://www.realtor.ca"
     # Human-paced, jittered delay between result pages (seconds).
     page_delay_min: 3.0
