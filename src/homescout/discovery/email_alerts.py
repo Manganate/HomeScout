@@ -16,7 +16,7 @@ Two ways to supply the messages:
 
 Alert emails carry address, price, beds/baths and the listing link, but no
 coordinates — so addresses are geocoded through the cached Nominatim helper.
-That is also enough for the City assessment join, which keys on address.
+That is also enough for the municipal assessment join, which keys on address.
 """
 
 from __future__ import annotations
@@ -91,7 +91,7 @@ class EmailAlertSource:
         listings: dict[str, Listing] = {}
         for path in files:
             try:
-                for listing in parse_message(path.read_bytes(), source=self.name):
+                for listing in parse_message(path.read_bytes(), source=self.name, area=criteria.area):
                     # Later emails win: a re-alert usually means a price change.
                     listings[listing.mls_id] = listing
             except Exception as exc:
@@ -101,7 +101,7 @@ class EmailAlertSource:
         log.info("Parsed %d listing(s) from %d email file(s)", len(found), len(files))
 
         if self.geocode:
-            _geocode_all(found)
+            _geocode_all(found, area=criteria.area)
 
         return found
 
@@ -110,7 +110,7 @@ class EmailAlertSource:
 # Parsing
 # ---------------------------------------------------------------------------
 
-def parse_message(raw: bytes, source: str = "email") -> list[Listing]:
+def parse_message(raw: bytes, source: str = "email", area: str = "") -> list[Listing]:
     """Extract listings from one saved email (.eml) or raw HTML."""
     text = _to_text(raw)
     if not text:
@@ -120,6 +120,7 @@ def parse_message(raw: bytes, source: str = "email") -> list[Listing]:
     # when this was sent". Nothing in the body carries a list date, so without
     # this the freshness sub-score would be unavailable for every listing.
     sent = _message_date(raw)
+    city = area.split(",")[0].strip() if area else ""
 
     listings = []
     seen: set[str] = set()
@@ -138,8 +139,8 @@ def parse_message(raw: bytes, source: str = "email") -> list[Listing]:
             mls_id=_mls_id(window, listing_id),
             source=source,
             url=match.group(0),
-            address=_address_from_slug(slug),
-            city="Calgary",
+            address=_address_from_slug(slug, area),
+            city=city,
             price=_first_int(_PRICE, window),
             beds=_rooms(_BEDS, window),
             baths=_rooms(_BATHS, window),
@@ -209,15 +210,19 @@ def _to_text(raw: bytes) -> str:
     return re.sub(r"[ \t]+", " ", text)
 
 
-def _address_from_slug(slug: str) -> str:
+_PROVINCE_ABBREV = {"ab", "bc", "mb", "nb", "nl", "ns", "nt", "nu", "on", "pe", "qc", "sk", "yt"}
+
+
+def _address_from_slug(slug: str, area: str = "") -> str:
     """Recover a street address from a REALTOR.ca URL slug.
 
-    "123-main-st-sw-calgary-alberta" -> "123 Main St SW". The trailing city and
-    province are dropped so the result matches the City parcel index, which is
-    keyed on street address alone.
+    "123-main-st-sw-city-province" -> "123 Main St SW". The trailing city and
+    province are dropped so the result matches the municipal parcel index,
+    which is keyed on street address alone.
     """
     parts = [p for p in slug.split("-") if p]
-    drop = {"calgary", "alberta", "ab", "canada"}
+    drop = {"canada"} | _PROVINCE_ABBREV
+    drop.update(w.lower() for w in re.split(r"[\s,]+", area) if w)
     while parts and parts[-1].lower() in drop:
         parts.pop()
     if not parts:
@@ -266,7 +271,7 @@ def _rooms(pattern: re.Pattern, text: str) -> float | None:
 # ---------------------------------------------------------------------------
 
 def _expand_for_geocoding(address: str) -> str:
-    """Expand Calgary's street-type abbreviations into words Nominatim knows.
+    """Expand the source municipality's street-type abbreviations into words Nominatim knows.
 
     Derived by inverting the abbreviation table used for the parcel-assessment
     join, so the two never drift apart. Only the street-type position is
@@ -307,7 +312,7 @@ def _build_expansions() -> dict[str, str]:
 _EXPANSIONS = _build_expansions()
 
 
-def _geocode_all(listings: list[Listing]) -> None:
+def _geocode_all(listings: list[Listing], area: str = "") -> None:
     """Fill in coordinates from addresses, cached and rate-limited.
 
     Alert emails carry no coordinates, but the distance pre-filter and commute
@@ -326,14 +331,15 @@ def _geocode_all(listings: list[Listing]) -> None:
     resolved = 0
     try:
         for listing in pending:
-            city = listing.city or "Calgary"
-            # Try the expanded form first: REALTOR.ca slugs keep Calgary's own
-            # abbreviations ("VI" for Villas, "GR" for Green), which Nominatim
-            # does not recognize, so the raw address alone silently fails to
-            # resolve and the listing is then dropped for missing coordinates.
+            locality = listing.city or area
+            # Try the expanded form first: REALTOR.ca slugs keep the source
+            # municipality's own abbreviations ("VI" for Villas, "GR" for
+            # Green), which Nominatim does not recognize, so the raw address
+            # alone silently fails to resolve and the listing is then dropped
+            # for missing coordinates.
             candidates = [
-                f"{_expand_for_geocoding(listing.address)}, {city}, Alberta, Canada",
-                f"{listing.address}, {city}, Alberta, Canada",
+                f"{_expand_for_geocoding(listing.address)}, {locality}",
+                f"{listing.address}, {locality}",
             ]
             for query in dict.fromkeys(candidates):
                 coords = geocode(query, conn=conn)

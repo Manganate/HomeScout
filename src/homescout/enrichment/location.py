@@ -1,8 +1,8 @@
-"""City of Calgary open data: parcel assessments.
+"""Municipal open data: parcel assessments.
 
 `assessment_ratio = list_price / assessed_value` is a stronger value signal than
 price-per-sqft alone, because it directly surfaces listings priced below the
-City's own market assessment.
+municipality's own market assessment.
 
 The parcel table is fetched once as a slim CSV (address, value, year — filtered
 server-side to residential) and cached in SQLite. Paging this per run would make
@@ -29,8 +29,6 @@ from homescout.filtering.quality import normalize_address
 
 log = logging.getLogger(__name__)
 
-# Slim, server-side-filtered export: 3 columns, residential only.
-_RESOURCE = "https://data.calgary.ca/resource/4bsw-nn7w.csv"
 _PARAMS = {
     "$select": "address,assessed_value,roll_year",
     "$where": "assessment_class='RE'",
@@ -51,11 +49,14 @@ def ensure_assessments(conn, force: bool = False) -> int:
         log.debug("Assessments already cached (%s rows)", f"{existing:,}")
         return existing
 
-    cfg = load_sources_config().get("services", {}).get("calgary_open_data", {}) or {}
-    url = cfg.get("assessments_resource", _RESOURCE)
+    cfg = load_sources_config().get("services", {}).get("assessments_open_data", {}) or {}
+    url = cfg.get("assessments_resource")
+    if not url:
+        log.debug("No assessments_open_data.assessments_resource configured; skipping")
+        return existing
     timeout = float(cfg.get("timeout_s", 300))
 
-    log.info("Fetching Calgary parcel assessments (one-time, ~580k residential rows)...")
+    log.info("Fetching municipal parcel assessments (one-time, large residential export)...")
     try:
         response = httpx.get(
             url,
@@ -65,15 +66,15 @@ def ensure_assessments(conn, force: bool = False) -> int:
             follow_redirects=True,
         )
         if response.status_code != 200:
-            log.warning("Calgary open data returned HTTP %s; assessments unavailable", response.status_code)
+            log.warning("Municipal open data returned HTTP %s; assessments unavailable", response.status_code)
             return existing
     except httpx.HTTPError as exc:
-        log.warning("Could not fetch Calgary assessments (%s); continuing without them", exc)
+        log.warning("Could not fetch municipal assessments (%s); continuing without them", exc)
         return existing
 
     rows = _parse_csv(response.text)
     if not rows:
-        log.warning("Calgary assessment export parsed to zero rows")
+        log.warning("Municipal assessment export parsed to zero rows")
         return existing
 
     inserted = bulk_insert_assessments(conn, rows)

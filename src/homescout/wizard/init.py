@@ -24,7 +24,6 @@ console = Console()
 
 # Well-known downtown anchors, so the common cases need no coordinate lookup.
 CBD_PRESETS: dict[str, tuple[float, float]] = {
-    "calgary": (51.0452, -114.0630),
     "edmonton": (53.5444, -113.4909),
     "vancouver": (49.2827, -123.1207),
     "toronto": (43.6487, -79.3817),

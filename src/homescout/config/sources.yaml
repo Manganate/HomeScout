@@ -26,12 +26,13 @@ listing_sources:
     # Headless browsers are fingerprinted and blocked outright by this site.
     headless: false
     nav_timeout_ms: 60000
-    # Calgary bounding box (south, west, north, east).
+    # Search-area bounding box (south, west, north, east). Replace with your
+    # own market's coordinates.
     bbox:
-      south: 50.842
-      west: -114.316
-      north: 51.212
-      east: -113.859
+      south: 0.0
+      west: 0.0
+      north: 0.0
+      east: 0.0
 
   fixtures:
     enabled: true          # offline sample data; used by tests and --source fixtures
@@ -69,9 +70,11 @@ services:
     retries: 2
     radius_m: 1000
 
-  calgary_open_data:
-    # Socrata portal. Current Year Property Assessments (parcel).
-    assessments_csv: "https://data.calgary.ca/api/views/4bsw-nn7w/rows.csv?accessType=DOWNLOAD"
+  assessments_open_data:
+    # Socrata (or similar) municipal open-data portal. Current Year Property
+    # Assessments (parcel). Point this at your own municipality's export;
+    # left blank, assessment enrichment is skipped.
+    assessments_resource: ""
     timeout_s: 300
 
 # Shared HTTP identity. Nominatim's usage policy requires a descriptive

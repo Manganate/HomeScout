@@ -1,9 +1,8 @@
-"""Real Calgary parcel records used to build offline fixtures.
+"""Real parcel records used to build offline fixtures.
 
-Sampled from the City of Calgary open data portal (dataset 4bsw-nn7w,
-residential parcels), so the fixture pipeline exercises the real
-address-normalization and assessment-join paths rather than synthetic strings
-that could never match.
+Sampled from a municipal open data portal (residential parcels), so the
+fixture pipeline exercises the real address-normalization and assessment-join
+paths rather than synthetic strings that could never match.
 
 Each entry is (address, assessed_value, latitude, longitude); coordinates are
 the centroid of the parcel polygon.

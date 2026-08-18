@@ -5,11 +5,11 @@
 # a city, budget, or commute radius never requires a code change.
 
 location:
-  area: "Calgary, Alberta"
+  area: "Your City, Province"
   # CBD anchor that commute time is measured to.
-  # Default is the Stephen Avenue core in downtown Calgary.
-  cbd_lat: 51.0452
-  cbd_lon: -114.0630
+  # Set this to your own downtown core's coordinates.
+  cbd_lat: 0.0
+  cbd_lon: 0.0
 
 search:
   price_min: 600000

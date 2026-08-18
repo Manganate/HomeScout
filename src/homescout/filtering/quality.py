@@ -22,10 +22,10 @@ _PUNCT = re.compile(r"[.,#]")
 
 # Street-type and direction abbreviations, so the same address written two ways
 # collapses to one key. Used for dedupe and for the parcel-assessment join.
-# Calgary's own street-type abbreviations, taken from the City parcel dataset
-# rather than assumed — the City uses AV (not AVE), BV (not BLVD), CO for Court,
-# GR for Green, and GV for Grove. Getting these wrong silently drops the
-# assessment join for whole street types.
+# Taken from the source municipality's own parcel dataset rather than
+# assumed — it uses AV (not AVE), BV (not BLVD), CO for Court, GR for Green,
+# and GV for Grove. Getting these wrong silently drops the assessment join
+# for whole street types.
 _STREET_TYPES = {
     "avenue": "av", "ave": "av",
     "bay": "ba",
@@ -77,12 +77,12 @@ def normalize_address(address: str) -> str:
     only exact matches on the result — a mismatched parcel is worse than a
     missing one, because it yields a confident wrong number.
 
-    Only the *street-type position* is abbreviated, never every word. Calgary
-    street names legitimately contain words that are also street types:
-    "175 DEER LANE RD SE" has the name "DEER LANE" and the type "RD", and
-    abbreviating every match would corrupt it to "DEER LN RD". Calgary
-    addresses are `<number> <name> <type> <quadrant>`, so the type is the token
-    before the quadrant, or the last token when no quadrant is present.
+    Only the *street-type position* is abbreviated, never every word. Street
+    names in this addressing scheme legitimately contain words that are also
+    street types: "175 DEER LANE RD SE" has the name "DEER LANE" and the type
+    "RD", and abbreviating every match would corrupt it to "DEER LN RD".
+    Addresses are `<number> <name> <type> <quadrant>`, so the type is the
+    token before the quadrant, or the last token when no quadrant is present.
     """
     if not address:
         return ""

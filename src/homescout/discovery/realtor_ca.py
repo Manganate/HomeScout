@@ -37,7 +37,7 @@ API_MARKER = "PropertySearch_Post"
 
 
 class RealtorCaSource:
-    """Fetches Calgary-area listings by driving the public map search UI."""
+    """Fetches listings by driving the public map search UI."""
 
     name = "realtor_ca"
 
@@ -137,10 +137,10 @@ class RealtorCaSource:
         # means unbounded; PropertySearchTypeId 1 is Residential;
         # TransactionTypeId 2 is For Sale).
         params = [
-            f"LatitudeMax={bbox.get('north', 51.212)}",
-            f"LongitudeMax={bbox.get('east', -113.859)}",
-            f"LatitudeMin={bbox.get('south', 50.842)}",
-            f"LongitudeMin={bbox.get('west', -114.316)}",
+            f"LatitudeMax={bbox.get('north', 0.0)}",
+            f"LongitudeMax={bbox.get('east', 0.0)}",
+            f"LatitudeMin={bbox.get('south', 0.0)}",
+            f"LongitudeMin={bbox.get('west', 0.0)}",
             f"PriceMin={criteria.price_min}",
             f"PriceMax={criteria.price_max}",
             f"BedRange={criteria.beds_min}-0",
@@ -378,7 +378,7 @@ def _days_on_market(result: dict) -> int | None:
 
 
 def _split_address(text: str) -> tuple[str, str, str]:
-    """Split "123 Main St SW, Calgary, Alberta T2P1A1" into its parts."""
+    """Split "123 Main St SW, City, Province T2P1A1" into its parts."""
     parts = [p.strip() for p in str(text or "").split("|")[0].split(",") if p.strip()]
     street = parts[0] if parts else ""
     city = parts[1] if len(parts) > 1 else ""

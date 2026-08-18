@@ -18,9 +18,9 @@ from datetime import UTC, date, datetime
 class SearchCriteria:
     """User search parameters, loaded from search.yaml."""
 
-    area: str = "Calgary, Alberta"
-    cbd_lat: float = 51.0452
-    cbd_lon: float = -114.0630
+    area: str = ""
+    cbd_lat: float = 0.0
+    cbd_lon: float = 0.0
 
     price_min: int = 600_000
     price_max: int = 800_000

@@ -3,8 +3,8 @@
 Used by the test suite and by `homescout run scrape --source fixtures`, so the
 whole pipeline can be developed and verified without touching a listing portal.
 
-Built from REAL Calgary parcel records (see `_parcels.py`) — real addresses,
-real coordinates, real City assessed values. Synthetic addresses would never
+Built from real parcel records (see `_parcels.py`) — real addresses, real
+coordinates, real municipal assessed values. Synthetic addresses would never
 match the assessment join, so the fixture path would silently skip the very
 code it is supposed to exercise.
 
@@ -53,7 +53,7 @@ class FixtureSource:
                 source=self.name,
                 url=f"https://example.invalid/listing/FIX{i:04d}",
                 address=address,
-                city="Calgary",
+                city="",
                 postal_code="",
                 price=price,
                 beds=float(rng.choice([2, 3, 3, 3, 4, 4, 5])),

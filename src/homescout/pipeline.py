@@ -209,7 +209,7 @@ def _run_analyze(criteria: SearchCriteria, source: str | None, refresh_assessmen
     endpoint capped near 1 req/s, so a large pool would just queue behind the
     token bucket. Phases B and C of the distance handling happen here.
     """
-    from homescout.enrichment import amenities, calgary, commute, walkability
+    from homescout.enrichment import amenities, commute, location, walkability
 
     conn = get_connection()
     try:
@@ -219,7 +219,7 @@ def _run_analyze(criteria: SearchCriteria, source: str | None, refresh_assessmen
             return {"input": 0, "analyzed": 0}
 
         # One-time bulk load; joined locally thereafter.
-        held = calgary.ensure_assessments(conn, force=refresh_assessments)
+        held = location.ensure_assessments(conn, force=refresh_assessments)
         if held:
             console.print(f"  Parcel assessments available: [bold]{held:,}[/bold]")
 
@@ -302,11 +302,11 @@ def _run_analyze(criteria: SearchCriteria, source: str | None, refresh_assessmen
         for row in rows:
             fields = results.get(row["mls_id"], {})
 
-            assessed = calgary.assessment_for(conn, row["address"])
+            assessed = location.assessment_for(conn, row["address"])
             if assessed:
                 matched += 1
                 fields["assessed_value"] = assessed
-                fields["assessment_ratio"] = calgary.ratio(row["price"], assessed)
+                fields["assessment_ratio"] = location.ratio(row["price"], assessed)
 
             update_enrichment(conn, row["mls_id"], fields)
 

@@ -107,7 +107,7 @@ CREATE TABLE IF NOT EXISTS geocode_cache (
     fetched_at   REAL
 );
 
--- Bulk City of Calgary parcel assessments, fetched once and joined locally.
+-- Bulk municipal parcel assessments, fetched once and joined locally.
 CREATE TABLE IF NOT EXISTS assessments (
     address_key    TEXT PRIMARY KEY,
     assessed_value INTEGER,

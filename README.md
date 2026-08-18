@@ -77,7 +77,7 @@ Listing sources implement the `ListingSource` protocol in `discovery/base.py`, s
 |---|---|---|
 | `email` | **default** | saved-search alert emails |
 | `fixtures` | dev/test | Offline sample data built from real parcels |
-| `realtor_ca` | **disabled** | Blocked by bot protection — see below |
+| `realtor_ca` | **disabled** | Blocked by bot protection |
 
 ### `email` — alert ingestion
 
@@ -102,8 +102,14 @@ IMAP access is read-only: messages are fetched with `BODY.PEEK` so they aren't m
 
 Two things the emails don't carry, and how each is recovered:
 
-- **No coordinates.** Addresses are geocoded via Nominatim (1 req/s, cached), expanding abbreviations first — `71 Edgepark Vi NW` → `Edgepark Villas`, which Nominatim can resolve. Without that expansion the listing fails to geocode and is dropped for missing coordinates.
+- **No coordinates.** Addresses are geocoded via Nominatim (1 req/s, cached), expanding street-type abbreviations first — `12 Someplace Vi NW` → `Someplace Villas`, which Nominatim can resolve. Without that expansion the listing fails to geocode and is dropped for missing coordinates.
 - **No list date.** The email's own `Date:` header is the freshness signal — an alert means "new as of when this was sent". Bare saved HTML has no headers, so freshness is simply unavailable and the scorer reweights around it.
+
+### `realtor_ca` — disabled
+
+Direct scraping does not work. REALTOR.ca sits behind Imperva, which returns **HTTP 403 to automated browsers before the page loads**, so the search API is never reached. Notably a plain `curl` from the same IP gets 200 — the detection is on the browser fingerprint, not the network. Getting past that would mean defeating an access control the operator is actively enforcing, so the module is left disabled as a reference implementation.
+
+Enrichment uses free, keyless public services — OpenStreetMap Overpass for amenities, OSRM for routing, Nominatim for geocoding, and a municipal open data portal for parcel assessments. All are rate-limited and cached in SQLite, so re-runs cost nothing: a cold analyze stage takes minutes, a warm one under a second.
 
 ## Terms of use
 
